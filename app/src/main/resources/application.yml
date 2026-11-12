@@ -1,0 +1,101 @@
+spring:
+  application:
+    name: cvm-signals
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/cvmsignals
+    username: cvm
+    password: cvm
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+  flyway:
+    enabled: true
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: br.unisinos.cvmsignals.shared.events
+
+  ai:
+    # Múltiplos ChatModels simultâneos: o ChatClient.Builder padrão é
+    # desabilitado e os clientes são construídos manualmente em AiConfig.
+    chat:
+      client:
+        enabled: false
+    # Único EmbeddingModel do sistema: BGE-M3 local via Ollama (1024 dims).
+    model:
+      embedding: ollama
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      chat:
+        options:
+          model: ${OLLAMA_CHAT_MODEL:gemma4:e4b}
+          temperature: 0.0
+      embedding:
+        options:
+          model: ${OLLAMA_EMBEDDING_MODEL:bge-m3}
+    openai:
+      api-key: ${OPENAI_API_KEY:not-configured}
+      chat:
+        options:
+          model: ${OPENAI_MODEL:gpt-4o}
+          temperature: 0.0
+    anthropic:
+      api-key: ${ANTHROPIC_API_KEY:not-configured}
+      chat:
+        options:
+          model: ${ANTHROPIC_MODEL:claude-sonnet-5}
+
+cvm:
+  base-url: https://dados.cvm.gov.br
+  # O ENET limita requisições por IP numa janela curta. Passando do ritmo,
+  # ele responde HTTP 200 com a página intermediária do ASP.NET em vez do
+  # arquivo, o Tika extrai zero caractere e o documento vira FAILED.
+  # Coletas grandes pedem valores mais altos: é mais rápido baixar devagar
+  # uma vez do que reprocessar o lote inteiro várias vezes.
+  download:
+    user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36
+    max-attempts: 3        # tentativas por documento
+    backoff-ms: 4000       # espera entre tentativas (cresce a cada uma)
+    retry-pause-ms: 6000   # espera entre documentos no reparse-failed
+
+brapi:
+  base-url: https://brapi.dev
+  token: ${BRAPI_TOKEN:}
+
+tei:
+  url: ${TEI_URL:http://localhost:8081}
+
+indexing:
+  chunk:
+    max-chars: 1800
+    overlap-chars: 200
+
+retrieval:
+  rrf-k: 60
+  candidates-per-arm: 20
+
+extraction:
+  providers: ${EXTRACTION_PROVIDERS:CLAUDE_SONNET,GPT_4O,GEMMA}
+  context-top-k: 5
+  auto: ${EXTRACTION_AUTO:false}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  metrics:
+    tags:
+      application: cvm-signals

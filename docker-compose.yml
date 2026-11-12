@@ -1,0 +1,100 @@
+# Ambiente completo do pipeline (Seção 4.4): um comando sobe a infraestrutura.
+# A aplicação Spring roda no host (make run) para aproveitar o Ollama nativo no macOS.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: cvm-postgres
+    environment:
+      POSTGRES_DB: cvmsignals
+      POSTGRES_USER: cvm
+      POSTGRES_PASSWORD: cvm
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cvm -d cvmsignals"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  kafka:
+    image: apache/kafka:3.7.0
+    container_name: cvm-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:19092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:19092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+  # Embeddings BGE-M3 e o braço Gemma rodam aqui. No macOS, prefira o app
+  # Ollama nativo (Metal) e não suba este serviço; em Linux, use-o à vontade.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: cvm-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    profiles: ["linux"]
+
+  # Reranker cross-encoder BGE-reranker-v2-m3. O Ollama não expõe API de
+  # rerank; o TEI da HuggingFace serve o mesmo modelo da família BGE (ADR-0003).
+  # A imagem é específica por arquitetura — a HF publica manifestos separados:
+  #   Apple Silicon / aarch64 : cpu-arm64-1.9  (default, ambiente do autor)
+  #   x86_64                  : cpu-1.9        (defina TEI_IMAGE no .env)
+  # Em contêiner não há Metal/MPS: a inferência é CPU-bound. Para acelerar no
+  # macOS, rode o TEI nativo (make tei-native) e não suba este serviço.
+  tei-reranker:
+    image: ${TEI_IMAGE:-ghcr.io/huggingface/text-embeddings-inference:cpu-arm64-1.9}
+    container_name: cvm-tei
+    command: --model-id BAAI/bge-reranker-v2-m3
+    ports:
+      - "8081:80"
+    volumes:
+      - tei-cache:/data
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: cvm-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: cvm-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./ops/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+
+  # Avaliação RAGAS em container Python isolado (Seção 4.5).
+  ragas:
+    build: ./ragas
+    container_name: cvm-ragas
+    profiles: ["eval"]
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    volumes:
+      - ./ragas/data:/data
+
+volumes:
+  pgdata:
+  ollama:
+  tei-cache:

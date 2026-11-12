@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CVM Signals — Avaliação de Utilidade Percebida (TAM)</title>
+<style>
+  :root { --azul:#1a4b8c; --cinza:#f4f6f8; --borda:#d8dee5; }
+  * { box-sizing:border-box; }
+  body { font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; margin:0; background:var(--cinza); color:#20242a; }
+  header { background:var(--azul); color:#fff; padding:1rem 1.5rem; }
+  header h1 { margin:0; font-size:1.15rem; font-weight:600; }
+  header p { margin:.25rem 0 0; font-size:.85rem; opacity:.85; }
+  main { max-width:960px; margin:1.5rem auto; padding:0 1rem; }
+  section { background:#fff; border:1px solid var(--borda); border-radius:8px; padding:1.25rem; margin-bottom:1.5rem; }
+  h2 { font-size:1rem; margin:0 0 .75rem; color:var(--azul); }
+  .sinal { border:1px solid var(--borda); border-radius:6px; padding:.75rem .9rem; margin-bottom:.6rem; }
+  .sinal .meta { font-size:.78rem; color:#5b6470; margin-bottom:.25rem; }
+  .badge { display:inline-block; font-size:.72rem; font-weight:600; padding:.1rem .5rem; border-radius:10px; background:#e8eef7; color:var(--azul); margin-right:.35rem; }
+  .rotulo { font-weight:700; }
+  .just { font-size:.85rem; margin:.35rem 0 0; }
+  .evid { font-size:.78rem; color:#5b6470; font-style:italic; margin:.25rem 0 0; }
+  table { width:100%; border-collapse:collapse; font-size:.85rem; }
+  td, th { padding:.45rem .4rem; border-bottom:1px solid var(--borda); text-align:left; vertical-align:top; }
+  td.likert { white-space:nowrap; }
+  td.likert label { margin-right:.55rem; font-size:.8rem; }
+  input[type=text], textarea, select { width:100%; padding:.5rem; border:1px solid var(--borda); border-radius:6px; font:inherit; }
+  .linha { display:flex; gap:1rem; margin-bottom:.75rem; }
+  .linha > div { flex:1; }
+  button { background:var(--azul); color:#fff; border:0; border-radius:6px; padding:.6rem 1.2rem; font:inherit; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  #status { margin-left:.75rem; font-size:.85rem; }
+  .ok { color:#1c7c3c; } .erro { color:#b3261e; }
+</style>
+</head>
+<body>
+<header>
+  <h1>CVM Signals — Sinais Financeiros Extraídos por LLMs</h1>
+  <p>Estudo de utilidade percebida (TAM) — participação voluntária conforme TCLE. Nenhum conteúdo constitui recomendação de investimento.</p>
+</header>
+<main>
+  <section>
+    <h2>Sinais extraídos</h2>
+    <div id="sinais">Carregando…</div>
+  </section>
+
+  <section>
+    <h2>Questionário semanal (escala 1 = discordo totalmente … 5 = concordo totalmente)</h2>
+    <div class="linha">
+      <div>
+        <label for="participante">Código do participante</label>
+        <input type="text" id="participante" placeholder="ex.: P03" maxlength="40">
+      </div>
+      <div>
+        <label for="semana">Semana do estudo</label>
+        <select id="semana"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>
+      </div>
+    </div>
+    <table id="tam"></table>
+    <p><label for="comentario">Comentários (opcional) — percepção livre sobre os sinais gerados</label>
+    <textarea id="comentario" rows="3"></textarea></p>
+    <button id="enviar">Enviar respostas</button><span id="status"></span>
+  </section>
+</main>
+<script>
+const state = { statements: [] };
+
+async function load() {
+  const res = await fetch('/api/evaluation/signals');
+  const data = await res.json();
+  state.statements = data.statements;
+  renderSignals(data.signals);
+  renderTam(data.statements);
+}
+
+function renderSignals(signals) {
+  const el = document.getElementById('sinais');
+  if (!signals.length) { el.textContent = 'Nenhum sinal disponível ainda.'; return; }
+  el.innerHTML = signals.map(s => `
+    <div class="sinal">
+      <div class="meta">${s.companyName} · ${s.documentType} · ${s.referenceDate ?? ''}</div>
+      <span class="badge">${s.model}</span><span class="badge">${s.signalType}</span>
+      <span class="rotulo">${s.label}</span> <small>(confiança ${(s.confidence*100).toFixed(0)}%)</small>
+      ${s.justification ? `<p class="just">${s.justification}</p>` : ''}
+      ${s.evidence ? `<p class="evid">“${s.evidence}”</p>` : ''}
+    </div>`).join('');
+}
+
+function renderTam(statements) {
+  const rows = statements.map((text, i) => {
+    const n = i + 1;
+    const radios = [1,2,3,4,5].map(v =>
+      `<label><input type="radio" name="q${n}" value="${v}"> ${v}</label>`).join('');
+    return `<tr><td>${n}. ${text}</td><td class="likert">${radios}</td></tr>`;
+  }).join('');
+  document.getElementById('tam').innerHTML =
+    '<tr><th>Afirmação</th><th>Resposta</th></tr>' + rows;
+}
+
+document.getElementById('enviar').addEventListener('click', async () => {
+  const status = document.getElementById('status');
+  status.textContent = ''; status.className = '';
+  const answers = {};
+  for (let n = 1; n <= state.statements.length; n++) {
+    const checked = document.querySelector(`input[name=q${n}]:checked`);
+    if (!checked) { status.textContent = `Responda a afirmação ${n}.`; status.className = 'erro'; return; }
+    answers[n] = Number(checked.value);
+  }
+  const body = {
+    participantCode: document.getElementById('participante').value.trim(),
+    week: Number(document.getElementById('semana').value),
+    answers,
+    comments: document.getElementById('comentario').value.trim() || null
+  };
+  if (!body.participantCode) { status.textContent = 'Informe o código do participante.'; status.className = 'erro'; return; }
+  const res = await fetch('/api/evaluation', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+  });
+  if (res.ok) { status.textContent = 'Respostas registradas. Obrigado!'; status.className = 'ok'; }
+  else { status.textContent = 'Falha ao registrar: ' + res.status; status.className = 'erro'; }
+});
+
+load();
+</script>
+</body>
+</html>

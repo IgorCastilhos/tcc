@@ -1,0 +1,10 @@
+target/
+*.class
+.env
+.idea/
+*.iml
+.vscode/
+.DS_Store
+ragas/data/*.jsonl
+ragas/data/*.csv
+ragas/data/*.json
