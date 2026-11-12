@@ -4,7 +4,12 @@ Artefato do TCC (Unisinos, 2026): pipeline de Retrieval-Augmented Generation
 que extrai **sentimento, risco e eventos corporativos** de documentos
 regulatórios da CVM (DFP, ITR, Fatos Relevantes) e compara três LLMs —
 Claude Sonnet, GPT-4o e Gemma (local) — sob o mesmo contexto e os mesmos
-prompts, com avaliação técnica (RAGAS) e de utilidade percebida (TAM).
+prompts. O artefato foi avaliado com usuários quanto à facilidade de uso e
+à utilidade percebidas, com base no TAM.
+
+- Site do estudo: https://pipeline-sinais-financeiros.vercel.app
+- Conjunto de dados (sinais dos três modelos, respostas anonimizadas e código
+  de análise): https://huggingface.co/datasets/IgorCast/sinais-fatos-relevantes-cvm
 
 ## Mapa monografia → código
 
@@ -13,7 +18,12 @@ prompts, com avaliação técnica (RAGAS) e de utilidade percebida (TAM).
 | §4.2 Arquitetura (6 bounded contexts, tópicos Kafka) | módulos `ingestion`, `indexing`, `retrieval`, `signal-extraction`, `market-data`, `evaluation`; `shared-kernel/Topics.java` |
 | §4.3 Modelo de dados (Figura 2, vector(1024), JSONB, HNSW, Flyway) | `app/src/main/resources/db/migration/V1__schema.sql` |
 | §4.4 Tecnologias (Spring AI, Tika, BGE-M3, pgvector, Kafka, Docker) | `AiConfig`, `TikaDocumentParser`, `docker-compose.yml` |
-| §4.5 Avaliação (RAGAS + estudo TAM de 3 semanas, Quadro 4) | `ragas/`, endpoint `/api/evaluation/ragas-dataset`, módulo `evaluation` + UI `static/index.html` |
+| §5.1 Implementação do pipeline (Quadro 4, parâmetros de execução) | `application.yml`, `.env.example` |
+| §5.2 Corpus e execução da extração | `make coletar`; `make web-snapshot` → `web/public/data/panel.json` |
+| §5.3 Interface do estudo | `web/` (React), publicada na Vercel |
+| §5.4 Avaliação de usabilidade (TAM, Quadros 5 e 6) | aba Questionário, `web/src/components/GoogleForm.tsx` (Google Forms) |
+| Cap. 6 Resultados e Apêndice B (Tabelas 2–7, Gráficos 1–4) | código de análise no [conjunto de dados do Hugging Face](https://huggingface.co/datasets/IgorCast/sinais-fatos-relevantes-cvm) |
+| Cap. 8 Trabalhos futuros (RAGAS) | `ragas/` e `/api/evaluation/ragas-dataset` — rotina pronta, não executada no estudo |
 
 Decisões registradas em `docs/adr/`.
 
@@ -250,9 +260,8 @@ docker compose down          # infra (adicione -v para apagar os volumes)
 
 # Interface do estudo (React)
 
-A interface que os participantes usam vive em `web/` — Vite + React +
-TypeScript, sem framework de UI. Ela é o que a Seção 4.5 da monografia chama
-de *interface web que apresenta os sinais extraídos pela pipeline*.
+A interface que os participantes usaram vive em `web/` — Vite + React +
+TypeScript, sem framework de UI — e é descrita na Seção 5.3 da monografia.
 
 ## O que ela mostra
 
@@ -273,10 +282,10 @@ classificação faz sentido.
 **Não há coluna de recomendação, e isso é deliberado.** O pipeline não produz
 esse juízo: os prompts pedem classificação de sentimento
 (`POSITIVO`/`NEGATIVO`/`NEUTRO`), de risco (`ALTO`/`MEDIO`/`BAIXO`) e a lista
-de eventos corporativos — nada mais. Some-se a isso o escopo declarado no
-TCC, que exclui "a recomendação de estratégias de investimento aos
-participantes", e a Seção 4.5, que afirma que "nenhuma recomendação de
-investimento é feita aos participantes". A interface exibe o **veredito de
+de eventos corporativos — nada mais. Some-se a isso a delimitação do tema
+(Seção 1.3), que exclui "a recomendação de estratégias de investimento aos
+participantes", e a Seção 5.4, segundo a qual "nenhuma recomendação de
+investimento foi feita aos participantes". A interface exibe o **veredito de
 cada modelo** e carrega o aviso no topo de cada tela.
 
 ## Apresentação guiada no primeiro acesso
@@ -297,7 +306,7 @@ Os passos que falam de empresa são omitidos automaticamente quando o painel
 ainda está vazio, então a apresentação nunca aponta para o nada.
 
 A aba **Questionário** embute o formulário do Google que aplica o
-instrumento TAM do Quadro 4. As respostas vão direto para a planilha do
+instrumento TAM do Quadro 5. As respostas vão direto para a planilha do
 formulário, o que resolve a coleta no site publicado com dados congelados —
 ali não há backend para receber um POST.
 
@@ -365,7 +374,7 @@ O site publicado roda com **dados congelados**: nem Postgres, nem chaves de
 API, nem custo de inferência por acesso.
 
 ```bash
-# 1. com a aplicação no ar e os sinais da semana já extraídos:
+# 1. com a aplicação no ar e os sinais já extraídos:
 make web-snapshot         # congela /api/panel em web/public/data/panel.json
 
 # 2. gera o build que lê o snapshot em vez da API:
@@ -383,10 +392,13 @@ que vai para os participantes. O `web/vercel.json` fixa `VITE_SNAPSHOT=1`, o
 comando de build, a saída e os cabeçalhos de cache (bundles com hash
 imutáveis, `index.html` e o snapshot sempre revalidados).
 
-Repita o ciclo a cada semana do estudo para atualizar os sinais:
+No estudo, o site serviu um único snapshot, gerado em 10/09/2026 e mantido
+sem alteração durante toda a coleta (Seção 5.2). Esse arquivo está publicado
+no conjunto de dados do Hugging Face. Para atualizar os sinais, repita o
+ciclo:
 
 ```bash
-make web-snapshot     # com a aplicação no ar, congela o painel da semana
+make web-snapshot     # com a aplicação no ar, congela o painel atual
 make web-publish      # rebuild com os dados novos
 cd web && vercel deploy --prod
 ```
@@ -410,13 +422,13 @@ cd web && vercel deploy --prod
 
 | Link | O que é |
 |---|---|
-| http://localhost:8080/ | **Interface React do estudo** — empresas, cotação, veredito dos 3 modelos e questionário do Quadro 4 |
+| http://localhost:8080/ | **Interface React do estudo** — empresas, cotação, veredito dos 3 modelos e questionário do Quadro 5 |
 | http://localhost:8080/api/retrieval/search?q=dividendos&topK=5 | Busca híbrida (pgvector + FTS `portuguese`), fusão RRF e rerank |
-| http://localhost:8080/api/panel | **Read model da interface** — empresas, cotações, leitura dos 3 modelos e Quadro 4, num payload só |
+| http://localhost:8080/api/panel | **Read model da interface** — empresas, cotações, leitura dos 3 modelos e afirmações do Quadro 5, num payload só |
 | http://localhost:8080/api/panel/tickers | Catálogo CNPJ → código B3, com marca de quem já foi ingerido |
 | http://localhost:8080/api/evaluation/signals | Todos os sinais persistidos, em JSON (lista plana) |
 | http://localhost:8080/api/evaluation/report | Consolidação descritiva das respostas TAM |
-| http://localhost:8080/api/evaluation/ragas-dataset | Dataset JSONL (`question`/`answer`/`contexts`) para o RAGAS |
+| http://localhost:8080/api/evaluation/ragas-dataset | Dataset JSONL (`question`/`answer`/`contexts`) para o RAGAS (trabalho futuro, não executado no estudo) |
 | `http://localhost:8080/api/signals/document/{documentId}` | Sinais de um documento, um por modelo e tipo |
 | `http://localhost:8080/api/market-data/series/{ticker}` | Série histórica de preços (ex.: `.../series/PETR4`) |
 | http://localhost:8080/actuator/health | Saúde da aplicação |
@@ -482,15 +494,31 @@ POST /api/ingestion/discover?type=FATO_RELEVANTE&year=2026&limit=20
 
 ## Avaliação
 
+A avaliação do trabalho é de usabilidade (Seção 5.4). Os participantes
+acessaram o site publicado, leram os sinais e responderam uma única vez, de
+forma anônima, às 10 afirmações Likert do Quadro 5, em um formulário do
+Google Forms embutido na aba Questionário. Foram 10 respostas, enviadas entre
+20/10 e 03/11/2026.
+
+A Seção 6.1 compara os sinais dos três modelos sobre o snapshot exibido
+(distribuição dos rótulos e concordância). Os rótulos foram gerados pelos
+modelos, sem anotação por especialistas, então essa comparação mede
+consistência, não acurácia.
+
+O snapshot, as respostas anonimizadas e o código que gera as tabelas e os
+gráficos estão no [conjunto de dados do Hugging Face](https://huggingface.co/datasets/IgorCast/sinais-fatos-relevantes-cvm).
+
+### RAGAS (trabalho futuro)
+
+A rotina de métricas RAGAS está pronta, mas não foi executada no estudo. A
+monografia a deixa como trabalho futuro (Capítulo 8), junto com a anotação de
+uma amostra por especialistas:
+
 ```bash
 make ragas          # exporta dataset dos sinais persistidos e roda o container RAGAS
 ```
 `context_recall` exige `ground_truth` (anotação manual) em cada linha do
 JSONL; sem ele, o script calcula as demais métricas e avisa.
-
-O estudo TAM roda na própria aplicação: participantes (código pseudonimizado,
-TCLE/CNS 510/2016) acessam `http://localhost:8080/`, leem os sinais e
-respondem às 10 afirmações Likert do Quadro 4 ao fim de cada semana.
 
 ## Testes
 

@@ -84,7 +84,7 @@ services:
     depends_on:
       - prometheus
 
-  # Avaliação RAGAS em container Python isolado (Seção 4.5).
+  # Métricas RAGAS em container Python isolado (trabalho futuro, Capítulo 8).
   ragas:
     build: ./ragas
     container_name: cvm-ragas

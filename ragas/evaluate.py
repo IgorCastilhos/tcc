@@ -1,4 +1,7 @@
-"""Avaliação técnica do pipeline com RAGAS (Seção 4.5 da monografia).
+"""Métricas RAGAS para o pipeline — trabalho futuro (Capítulo 8 da monografia).
+
+A rotina está pronta, mas não foi executada no estudo: a avaliação do
+trabalho é de usabilidade (Seção 5.4).
 
 Consome o JSONL exportado por GET /api/evaluation/ragas-dataset
 (question, answer, contexts, model, signal_type) e calcula faithfulness,
